@@ -220,22 +220,20 @@ class ContainerManager
      *
      * @return InteractiveStream
      */
-    public function exec(Container $container)
+    public function exec(Container $container, array $cmd = [], $attachstdin = false, $attachstdout = false, $attachstderr = true, $tty = false)
     {
-
-
         $body = [
-            'AttachStdin'  => false,
-            'AttachStdout' => true,
-            'AttachStderr' => true,
-            'Tty'          => false,
-            'Cmd' => [ '/bin/date' ]
+            'AttachStdin'  => $attachstdin,
+            'AttachStdout' => $attachstdout,
+            'AttachStderr' => $attachstderr,
+            'Tty'          => $tty,
+            'Cmd' => $cmd
+            #'Cmd' => [ '/bin/date' ]
             #'Cmd' => [ '/bin/bash', '-c', "ls /var/www/html" ]
         ];
         $response = $this->client->post(['/containers/{id}/exec', ['id' => $container->getId()]], [
             'body'         => Json::encode($body),
             'headers'      => ['content-type' => 'application/json'],
-            'wait'         => false,           // important
         ]);
 /*
 // test: do it directly with guzzle
@@ -259,14 +257,18 @@ $response = $client->post(['http://195.176.209.22:2375/containers/{id}/exec', ['
 #print_r($response->json()['Id']);
 
 #print_r('Response string=<' . $response->__toString() . ">\n");
-print_r('>>>> ');
+#print_r('>>>> ');
 
 // why does the following fail, maybe a guzzle 4 limitation but doc is for 5?
 // PHP Fatal error:  Call to undefined method GuzzleHttp\Message\Response::getContentLength() 
 // see also http://api.guzzlephp.org/class-Guzzle.Http.Message.Response.html
 //print_r('getContentLength=' . $response->getContentLength(). "\n");
 
+       return $response->json()['Id'];
+    }
 
+    public function execstart(Container $container)
+    {
 /*
         $execid = $response->json()['Id'];
 #lets manually give an ID to test. Turns out that the body is empty too!
