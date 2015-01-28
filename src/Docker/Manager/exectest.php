@@ -12,8 +12,10 @@ $manager = $docker->getContainerManager();
 try {
   $lookfor='vanilla2';
   $container = $manager->find($lookfor);
-  $foo = $manager->exec($container);
-#print_r($foo);
+  $execid = $manager->exec($container, ['/bin/date']);
+  print_r("Exec ID= " . $execid. "\n");
+  $result=$manager->execstart($execid);
+  print_r("Result= " . $result->__toString());
 
 } catch (Exception $e) {
   echo $e->getMessage();

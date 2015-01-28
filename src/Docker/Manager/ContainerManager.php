@@ -267,10 +267,8 @@ $response = $client->post(['http://195.176.209.22:2375/containers/{id}/exec', ['
        return $response->json()['Id'];
     }
 
-    public function execstart(Container $container)
+    public function execstart($execid)
     {
-/*
-        $execid = $response->json()['Id'];
 #lets manually give an ID to test. Turns out that the body is empty too!
 # (event those sniffing with "socat" shows Content-Length: 28 and the date string.
 $execid = "2f0c0dd8b9d91ec8b7ca4bfe06b4ce3cee667017c520f701f5bfc761b44895a1";
@@ -284,12 +282,13 @@ print_r($execid);
         if ($response->getStatusCode() !== "200") {
             throw UnexpectedStatusCodeException::fromResponse($response);
         }
-        #print_r('Body=<' . $response->getBody(true) . ">\n");
-        print_r('Response string=<' . $response->__toString() . ">\n");
 
+/*
+        print_r('Response string=<' . $response->__toString() . ">\n");
+        #print_r('Body=<' . $response->getBody(true) . ">\n");
         #return new InteractiveStream($response->getBody());
-        return new $response->getBody();
 */
+        return $response->getBody();
     }
 
 
