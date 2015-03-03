@@ -255,3 +255,4 @@ $response = $manager->execstart($execid, function ($log, $type) use($logger) {
 //Response stream is never read you need to simulate a wait in order to get output
 $response->getBody()->getContents();
 ```
+
