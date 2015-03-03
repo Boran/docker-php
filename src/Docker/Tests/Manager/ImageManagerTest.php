@@ -63,6 +63,23 @@ class ImageManagerTest extends TestCase
         $manager->inspect($image);
     }
 
+    public function testRemoveImages()
+    {
+        $containers = ['ubuntu:precise', '69c02692b0c1'];
+        $manager = $this
+            ->getMockBuilder('\Docker\Manager\ImageManager')
+            ->setMethods(['remove'])
+            ->disableOriginalConstructor()
+            ->getMock();
+
+        $manager->expects($this->exactly(2))
+            ->method('remove')
+            ->with($this->isInstanceOf('\Docker\Image'), false, false)
+            ->will($this->returnSelf());
+
+        $manager->removeImages($containers);
+    }
+
     public function testSearch()
     {
         $manager = $this->getManager();
@@ -70,7 +87,31 @@ class ImageManagerTest extends TestCase
         $result = $manager->search('test-image-not-exist');
         $this->assertEmpty($result);
 
-        $this->setExpectedException('\\Docker\\Exception\\APIException', 'Invalid namespace name (a), only [a-z0-9_] are allowed, size between 4 and 30');
+        $this->setExpectedException('\\Docker\\Exception\\APIException', 'Invalid namespace name');
         $manager->search('a/test');
+    }
+
+    public function testTag()
+    {
+        $image = $this->getManager()->find('test', 'foo');
+
+        $this->getManager()->tag($image, 'docker-php/unit-test', 'latest');
+
+        $this->assertEquals('docker-php/unit-test', $image->getRepository());
+        $this->assertEquals('latest', $image->getTag());
+
+        $newImage = $this->getManager()->find('docker-php/unit-test', 'latest');
+        $this->assertEquals($image->getId(), $newImage->getId());
+
+        $this->getManager()->removeImages(array($newImage));
+    }
+
+    public function testHistory()
+    {
+        $image = $this->getManager()->find('test', 'foo');
+        $history = $this->getManager()->history($image);
+
+        $this->assertGreaterThan(1, count($history));
+        $this->assertEquals('/bin/true', $history[0]['CreatedBy']);
     }
 }

@@ -190,6 +190,33 @@ class ImageManager
     }
 
     /**
+     * Remove multiple images from docker daemon
+     *
+     * @param Image[]|array $images  Images to remove
+     * @param boolean       $force   Force removal of image (default false)
+     * @param boolean       $noprune Do not remove parent images (default false)
+     *
+     * @throws \Docker\Exception\UnexpectedStatusCodeException
+     *
+     * @return ImageManager
+     */
+    public function removeImages(array $images, $force = false, $noprune = false)
+    {
+        foreach ($images as $image) {
+            if (!$image instanceof Image) {
+                $imageId = $image;
+
+                $image = new Image();
+                $image->setId($imageId);
+            }
+
+            $this->remove($image, $force, $noprune);
+        }
+
+        return $this;
+    }
+
+    /**
      * Search for an image on Docker Hub.
      *
      * @param string $term term to search
@@ -208,6 +235,61 @@ class ImageManager
                 ]
             ]
         );
+
+        if ($response->getStatusCode() !== "200") {
+            throw UnexpectedStatusCodeException::fromResponse($response);
+        }
+
+        return $response->json();
+    }
+
+    /**
+     * Tag an image
+     *
+     * @param Image $image image to tag
+     * @param $repository Repository name to use
+     * @param string $tag Tag to use
+     * @param bool $force Force to set tag even if an image with the same name already exists ?
+     *
+     * @throws \Docker\Exception\UnexpectedStatusCodeException
+     *
+     * @return ImageManager
+     */
+    public function tag(Image $image, $repository, $tag = 'latest', $force = false)
+    {
+        $response = $this->client->post([
+            '/images/{name}/tag?repo={repository}&tag={tag}&force={force}', [
+                'name' => $image->getId(),
+                'repository' => $repository,
+                'tag' => $tag,
+                'force' => intval($force)
+            ]
+        ]);
+
+        if ($response->getStatusCode() !== "201") {
+            throw UnexpectedStatusCodeException::fromResponse($response);
+        }
+
+        $image->setRepository($repository);
+        $image->setTag($tag);
+
+        return $this;
+    }
+
+    /**
+     * Get history of an image
+     *
+     * @param Image $image
+     *
+     * @throws \Docker\Exception\UnexpectedStatusCodeException
+     *
+     * @return array
+     */
+    public function history(Image $image)
+    {
+        $response = $this->client->get(['/images/{name}/history', [
+            'name' => $image->__toString()
+        ]]);
 
         if ($response->getStatusCode() !== "200") {
             throw UnexpectedStatusCodeException::fromResponse($response);
