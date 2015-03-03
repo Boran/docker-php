@@ -353,6 +353,23 @@ class ContainerManagerTest extends TestCase
         $manager->inspect($container);
     }
 
+    public function testRemoveContainers()
+    {
+        $containers = ['3360ea744df2', 'a412d121d015'];
+        $manager = $this
+            ->getMockBuilder('\Docker\Manager\ContainerManager')
+            ->setMethods(['remove'])
+            ->disableOriginalConstructor()
+            ->getMock();
+
+        $manager->expects($this->exactly(2))
+            ->method('remove')
+            ->with($this->isInstanceOf('\Docker\Container'), false)
+            ->will($this->returnSelf());
+
+        $manager->removeContainers($containers);
+    }
+
     public function testTop()
     {
         $container = new Container(['Image' => 'ubuntu:precise', 'Cmd' => ['sleep', '2']]);
@@ -411,6 +428,23 @@ class ContainerManagerTest extends TestCase
         $manager->remove($container);
     }
 
+    public function testCopyToDisk()
+    {
+       $container = new Container(['Image' => 'ubuntu:precise', 'Cmd' => ['touch', '/etc/default/docker-php-test']]);
+       $manager = $this->getManager();
+       $manager->run($container);
+       $manager->wait($container);
+
+       $tarFileName  = tempnam(sys_get_temp_dir(), 'testcopyToDisk.tar');
+       $manager->copyToDisk($container, '/etc/default', $tarFileName);
+
+       exec('/usr/bin/env tar -tf '.$tarFileName, $output);
+       $this->assertContains('default/docker-php-test', $output);
+
+       unlink($tarFileName);
+       $manager->remove($container);
+    }
+
     public function testLogs()
     {
         $container = new Container(['Image' => 'ubuntu:precise', 'Cmd' => ['echo', 'test']]);
@@ -453,7 +487,7 @@ class ContainerManagerTest extends TestCase
         $manager->stop($container);
         $manager->remove($container);
 
-        $this->getDocker()->getImageManager()->delete($container->getImage());
+        $this->getDocker()->getImageManager()->remove($container->getImage());
 
         $this->assertCount(2, $processes);
         $this->assertContains('test', implode("", $logs));
@@ -481,8 +515,40 @@ class ContainerManagerTest extends TestCase
         }, $logs);
 
         $manager->remove($container);
-        $this->getDocker()->getImageManager()->delete($container->getImage());
+        $this->getDocker()->getImageManager()->remove($container->getImage());
 
         $this->assertContains('HUP', implode("", $logs));
+    }
+
+    public function testExec()
+    {
+        $manager = $this->getManager();
+        $dockerFileBuilder = new ContextBuilder();
+        $dockerFileBuilder->from('ubuntu:precise');
+        $dockerFileBuilder->add('/daemon.sh', file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . 'script' . DIRECTORY_SEPARATOR . 'daemon.sh'));
+        $dockerFileBuilder->run('chmod +x /daemon.sh');
+
+        $this->getDocker()->build($dockerFileBuilder->getContext(), 'docker-php-restart-test', null, true, false, true);
+
+        $container = new Container(['Image' => 'docker-php-restart-test', 'Cmd' => ['/daemon.sh']]);
+        $manager->create($container);
+        $manager->start($container);
+
+        $type   = 0;
+        $output = "";
+        $execId = $manager->exec($container, ['/bin/bash', '-c', 'echo -n "output"']);
+
+        $this->assertNotNull($execId);
+
+        $response = $manager->execstart($execId, function ($log, $stdtype) use (&$type, &$output) {
+            $type = $stdtype;
+            $output = $log;
+        });
+
+        $response->getBody()->getContents();
+        $manager->kill($container);
+
+        $this->assertEquals(1, $type);
+        $this->assertEquals('output', $output);
     }
 }

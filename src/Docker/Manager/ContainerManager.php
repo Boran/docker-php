@@ -222,7 +222,6 @@ class ContainerManager
     }
 
 
-
     /**
      * Run a container (create, attach, start and wait)
      *
@@ -269,11 +268,11 @@ class ContainerManager
      * @param boolean  $attachstdin  
      * @param boolean  $attachstdout 
      * @param boolean  $attachstderr 
-     * @param integer  $tty  
+     * @param boolean  $tty
      *
      * @throws \Docker\Exception\UnexpectedStatusCodeException
      *
-     * @return ID of the executive
+     * @return string ID of the executive
      */
     public function exec(Container $container, array $cmd = [], $attachstdin = false, $attachstdout = true, $attachstderr = true, $tty = false)
     {
@@ -293,7 +292,7 @@ class ContainerManager
             throw UnexpectedStatusCodeException::fromResponse($response);
         }
 
-      return $response->json()['Id'];
+        return $response->json()['Id'];
     }
 
     /**
@@ -302,29 +301,31 @@ class ContainerManager
      * execstart() on that ID will return a different value each time.
      * todo: how are instances created by exec() and used by execstart() removed/cleanedup?
      *
-     * @param string   $id       identifier from exec()
+     * @param string   $execid       identifier from exec()
+     * @param callable $callback
      * @param boolean  $detach
      * @param boolean  $tty  
      *
      * @throws \Docker\Exception\UnexpectedStatusCodeException
      *
-     * @return Guzzle Stream
+     * @return \GuzzleHttp\Message\ResponseInterface
      */
-
-    public function execstart($execid, $detach = false, $tty = false)  
+    public function execstart($execid, callable $callback = null, $detach = false, $tty = false)
     {
         $body = ['Detach' => $detach, 'Tty' => $tty ];
+        $callback = $callback === null ? function() {} : $callback;
         $response = $this->client->post(['/exec/{id}/start', ['id' => $execid]], [
             'body'         => Json::encode($body),
             'headers'      => ['content-type' => 'application/json'],
+            'callback'     => $callback,
         ]);
+
         if ($response->getStatusCode() !== "200") {
             throw UnexpectedStatusCodeException::fromResponse($response);
         }
 
-        return $response->getBody();
+        return $response;
     }
-
 
     /**
      * Attach a container to a callback to read logs
@@ -461,7 +462,7 @@ class ContainerManager
     }
 
     /**
-     * Delete a container from docker server
+     * Remove a container from docker server
      *
      * @param \Docker\Container $container
      * @param boolean           $volumes
@@ -480,6 +481,32 @@ class ContainerManager
 
         if ($response->getStatusCode() !== "204") {
             throw UnexpectedStatusCodeException::fromResponse($response);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Remove multiple containers from docker server
+     *
+     * @param \Docker\Container[]|array $containers
+     * @param boolean                   $volumes
+     *
+     * @throws \Docker\Exception\UnexpectedStatusCodeException
+     *
+     * @return \Docker\Manager\ContainerManager
+     */
+    public function removeContainers(array $containers, $volumes = false)
+    {
+        foreach ($containers as $container) {
+            if (!$container instanceof Container) {
+                $containerId = $container;
+
+                $container = new Container();
+                $container->setId($containerId);
+            }
+
+            $this->remove($container, $volumes);
         }
 
         return $this;

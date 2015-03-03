@@ -1,29 +1,4 @@
-# Docker-PHP
-
-* [Connecting to Docker](#connecting-to-docker)
-* [Running a container](#running-a-container)
- * [Streaming a running container's output](#streaming-a-running-containers-output)
- * [Running a container as a daemon](#running-a-container-as-a-daemon)
-* [Creating, starting, attaching and waiting for containers](#creating-starting-attaching-and-waiting-for-containers)
-* [Mapping a container's ports](#mapping-a-containers-ports)
-* [Finding and inspecting Containers](#finding-and-inspecting-containers)
-* [Stopping and removing containers](#stopping-and-removing-containers)
-* [The Docker\Container class](#the-dockercontainer-class)
- * [Configuring exposed ports](#configuring-exposed-ports)
-
-## Connecting to Docker
-
-By default, Docker-PHP uses the `DOCKER_HOST` environment variable to connect to a running `dockerd`, if not set it will use `unix:///var/run/docker.sock`.
-You can, however, connect to an arbitrary server by passing an instance of the transport entrypoint `Docker\Http\Client`:
-
-```php
-<?php
-
-$client = new Docker\Http\DockerClient(array(), 'tcp://127.0.0.1');
-$docker = new Docker\Docker($client);
-```
-
-`DockerClient` is in fact a Guzzle Client with some default options.
+# Dealing with containers
 
 ## Running a container
 
@@ -60,6 +35,7 @@ You can run a container as a daemon (effectively making the `run()` method non-b
 
 $manager->run($container, $callback, [], true);
 ```
+
 ## Creating, starting, attaching and waiting for containers
 
 The `run()` command is actually a composite of `create()`, `start()`, `attach` and `wait`, just like the `docker run` CLI command that you might be used to. You can use these methods to gain more fine-grained control over your containers' workflow.
@@ -175,6 +151,40 @@ $manager
     ->remove($container);
 ```
 
+The `remove` method has a second argument (defaults to `false`) `$volumes` which allows you to remove the volumes associated with the container by setting it to `true`.
+
+
+```php
+$manager->remove($container, true);
+```
+
+
+## Removing multiple containers
+
+You can remove multiple containers at once by passing an array of `Docker\Container` instances or strings (container id or container name) to the `removeContainers()` method.
+
+```php
+$manager->removeContainers([$container, '889ceddbb88e', 'angry_goodall']);
+```
+
+Same as the `remove` method it has a second argument (defaults to `false`) `$volumes` which allows you to remove the volumes associated with the containers by setting it to `true`.
+
+Keep in mind that all of the containers have to be stopped before they can be removed.
+
+
+## Copy files or folders from a container
+
+Files and folders can be downloaded as a tar file from the container. The `copy()` function allows a folder/file to be downloaded as tar stream and `copyToDisk()` saves the result as a tar file.
+In the following example the `/etc/default` folder from an Ubuntu container called vanilla is downloaded to `/tmp/file.tar`.
+
+```php
+<?php
+
+$container = $manager->find('vanilla');
+$manager->copyToDisk($container, '/etc/default', '/tmp/file.tar');
+```
+
+
 ## The Docker\Container class
 
 The `Docker\Container` class is designed to help you manipulate containers. It has a few helper methods to set common runtime options.
@@ -189,7 +199,6 @@ $container->setEnv(['SYMFONY_ENV=prod', 'FOO=bar']);
 $container->setCmd(['/bin/echo', 'Hello Docker!']);
 
 $manager->run($container);
-
 
 printf('Container\'s id is %s', $container->getId());
 printf('Container\'s name is $s', $container->getName());
@@ -207,4 +216,42 @@ $ports = new Docker\PortCollection(80, 22);
 $ports->add(42);
 
 $container->setExposedPorts($ports);
+```
+
+## Exec: Run a process within an existing running container.
+
+Running a process inside a running container is done in two steps: create an exec instance (identified by a hash value) and starting that instance (and then reading the returned data).
+Example: connect to the container called 'vanilla2', create an exec for 'ls /var/www/html' (within a bash shell) and run it:
+
+```php
+<?php
+
+$containerName = 'vanilla2';
+$container = $manager->find($containerName);
+$execid = $manager->exec($container, ["/bin/bash", "-c", "ls /var/www/html"]);
+$response = $manager->execstart($execid);
+
+print_r("Result= <" . $response->getBody()->__toString() . ">\n");
+```
+
+Note that after an exec has been created it can be run several times, e.g. an exec for '/bin/date' would return a different value each time execstart() is called.
+
+You can also stream the result by using a callback during the execstart call :
+
+```php
+<?php
+
+$logger = new Psr\Log();
+
+$containerName = 'vanilla2';
+$container = $manager->find($containerName);
+$execid = $manager->exec($container, ["/bin/bash", "-c", "ls /var/www/html"]);
+
+$response = $manager->execstart($execid, function ($log, $type) use($logger) {
+	// Log output in real time
+	$logger->info($log, array('type' => $type));
+});
+
+//Response stream is never read you need to simulate a wait in order to get output
+$response->getBody()->getContents();
 ```
