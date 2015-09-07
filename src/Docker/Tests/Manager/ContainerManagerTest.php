@@ -430,21 +430,6 @@ class ContainerManagerTest extends TestCase
 
     public function testCopyToDisk()
     {
-<<<<<<< HEAD
-       $container = new Container(['Image' => 'ubuntu:precise', 'Cmd' => ['touch', '/etc/default/docker-php-test']]);
-       $manager = $this->getManager();
-       $manager->run($container);
-       $manager->wait($container);
-
-       $tarFileName  = tempnam(sys_get_temp_dir(), 'testcopyToDisk.tar');
-       $manager->copyToDisk($container, '/etc/default', $tarFileName);
-
-       exec('/usr/bin/env tar -tf '.$tarFileName, $output);
-       $this->assertContains('default/docker-php-test', $output);
-
-       unlink($tarFileName);
-       $manager->remove($container);
-=======
         $container = new Container(['Image' => 'ubuntu:precise', 'Cmd' => ['touch', '/etc/default/docker-php-test']]);
         $manager = $this->getManager();
         $manager->run($container);
@@ -458,7 +443,6 @@ class ContainerManagerTest extends TestCase
 
         unlink($tarFileName);
         $manager->remove($container);
->>>>>>> master
     }
 
     public function testLogs()
