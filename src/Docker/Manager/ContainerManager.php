@@ -3,10 +3,10 @@
 namespace Docker\Manager;
 
 use Docker\Container;
-use Docker\Http\Stream\InteractiveStream;
-use Docker\Json;
 use Docker\Exception\UnexpectedStatusCodeException;
 use Docker\Exception\ContainerNotFoundException;
+use Docker\Http\Stream\InteractiveStream;
+use Docker\Json;
 use GuzzleHttp\Client as HttpClient;
 use GuzzleHttp\Exception\RequestException;
 
@@ -98,12 +98,14 @@ class ContainerManager
      * @throws \GuzzleHttp\Exception\RequestException
      * @throws \Docker\Exception\ContainerNotFoundException
      *
-     * @return return json data from docker inspect
+     * @return array json data from docker inspect
      */
     public function inspect(Container $container)
     {
         try {
-            $response = $this->client->get(['/containers/{id}/json', ['id' => $container->getId()]]);
+            $response = $this->client->get(['/containers/{id}/json', [
+                'id' => $container->getId()
+            ]]);
         } catch (RequestException $e) {
             if ($e->hasResponse() && $e->getResponse()->getStatusCode() == "404") {
                 throw new ContainerNotFoundException($container->getId(), $e);
@@ -132,8 +134,7 @@ class ContainerManager
             'data' => [
                 'name' => $container->getName(),
             ],
-        ]],
-        [
+        ]],[
             'body'         => Json::encode($container->getConfig()),
             'headers'      => ['content-type' => 'application/json'],
         ]);
@@ -157,7 +158,9 @@ class ContainerManager
      */
     public function start(Container $container, array $hostConfig = [])
     {
-        $response = $this->client->post(['/containers/{id}/start', ['id' => $container->getId()]], [
+        $response = $this->client->post(['/containers/{id}/start', [
+            'id' => $container->getId()
+        ]],[
             'body'         => Json::encode($hostConfig),
             'headers'      => ['content-type' => 'application/json'],
             'wait'         => true,
@@ -209,14 +212,18 @@ class ContainerManager
      *
      * @return \Docker\Manager\ContainerManager
      */
-
     public function copyToDisk(Container $container, $source, $destination)
     {
         $stream = $this->copy($container, $source);
 
-        $output = fopen($destination, 'w+');
-        stream_copy_to_stream($stream->detach(), $output);
-        fclose($output);
+        $fd = fopen($destination, 'w+');
+
+        if ($fd) {
+            stream_copy_to_stream($stream->detach(), $fd);
+            fclose($fd);
+        } else {
+            throw new \Exception('file open failed: ' . $destination);
+        }
 
         return $this;
     }
@@ -265,9 +272,9 @@ class ContainerManager
      *
      * @param \Docker\Container     $container
      * @param array    $cmd          command to run
-     * @param boolean  $attachstdin  
-     * @param boolean  $attachstdout 
-     * @param boolean  $attachstderr 
+     * @param boolean  $attachstdin
+     * @param boolean  $attachstdout
+     * @param boolean  $attachstderr
      * @param boolean  $tty
      *
      * @throws \Docker\Exception\UnexpectedStatusCodeException
@@ -283,7 +290,9 @@ class ContainerManager
             'Tty'          => $tty,
             'Cmd' => $cmd
         ];
-        $response = $this->client->post(['/containers/{id}/exec', ['id' => $container->getId()]], [
+        $response = $this->client->post(['/containers/{id}/exec', [
+            'id' => $container->getId()
+        ]], [
             'body'         => Json::encode($body),
             'headers'      => ['content-type' => 'application/json'],
         ]);
@@ -304,7 +313,7 @@ class ContainerManager
      * @param string   $execid       identifier from exec()
      * @param callable $callback
      * @param boolean  $detach
-     * @param boolean  $tty  
+     * @param boolean  $tty
      *
      * @throws \Docker\Exception\UnexpectedStatusCodeException
      *
@@ -314,7 +323,9 @@ class ContainerManager
     {
         $body = ['Detach' => $detach, 'Tty' => $tty ];
         $callback = $callback === null ? function() {} : $callback;
-        $response = $this->client->post(['/exec/{id}/start', ['id' => $execid]], [
+        $response = $this->client->post(['/exec/{id}/start', [
+            'id' => $execid
+        ]], [
             'body'         => Json::encode($body),
             'headers'      => ['content-type' => 'application/json'],
             'callback'     => $callback,
@@ -325,6 +336,28 @@ class ContainerManager
         }
 
         return $response;
+    }
+
+    /**
+     * Get details about an executive
+     *
+     * @param string $execid Identifier from exec()
+     *
+     * @throws \Docker\Exception\UnexpectedStatusCodeException
+     *
+     * @return stdClass
+     */
+    public function execinspect($execid)
+    {
+        $response = $this->client->get(['/exec/{id}/json', [
+            'id' => $execid
+        ]]);
+
+        if ($response->getStatusCode() !== "200") {
+            throw UnexpectedStatusCodeException::fromResponse($response);
+        }
+
+        return json_decode((string) $response->getBody());
     }
 
     /**
@@ -419,7 +452,9 @@ class ContainerManager
      */
     public function wait(Container $container, $timeout = null)
     {
-        $response = $this->client->post(['/containers/{id}/wait', ['id' => $container->getId()]], [
+        $response = $this->client->post(['/containers/{id}/wait', [
+            'id' => $container->getId()
+        ]], [
             'timeout' => null === $timeout ? $this->client->getDefaultOption('timeout') : $timeout,
         ]);
 
@@ -449,8 +484,9 @@ class ContainerManager
         $response = $this->client->post(['/containers/{id}/stop?t={timeout}', [
             'id' => $container->getId(),
             'timeout' => $timeout,
+        ]],[
             'wait' => true,
-        ]]);
+        ]);
 
         if ($response->getStatusCode() !== "204" && $response->getStatusCode() !== "304") {
             throw UnexpectedStatusCodeException::fromResponse($response);
@@ -475,9 +511,11 @@ class ContainerManager
     {
         $response = $this->client->delete(['/containers/{id}?v={volumes}', [
             'id' => $container->getId(),
-            'v' => $volumes,
+            'volumes' => (integer)$volumes,
+            // TODO: implement force option
+        ]],[
             'wait' => true
-        ]]);
+        ]);
 
         if ($response->getStatusCode() !== "204") {
             throw UnexpectedStatusCodeException::fromResponse($response);
